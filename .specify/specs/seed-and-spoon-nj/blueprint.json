@@ -74,6 +74,55 @@
       "name": "Client",
       "description": "Service recipient",
       "permissions": ["clients:read:own", "client_services:read:own"]
+    },
+    {
+      "id": "founder",
+      "name": "Founder/President",
+      "description": "Organization founder with full authority",
+      "permissions": ["*"],
+      "document_access": "all",
+      "system_access": ["admin_dashboard", "financial_reports", "donation_management", "user_management", "board_portal"],
+      "external_tools": {"notion": "admin", "quickbooks": "admin", "google_drive": "admin"}
+    },
+    {
+      "id": "vice_president",
+      "name": "Vice President",
+      "description": "Second in command",
+      "permissions": ["admin_dashboard", "board_portal"],
+      "document_access": ["policy", "meeting_minutes", "playbooks", "admin_documents"],
+      "external_tools": {"notion": "edit", "google_drive": "edit"}
+    },
+    {
+      "id": "treasurer",
+      "name": "Treasurer",
+      "description": "Financial oversight",
+      "permissions": ["admin_dashboard", "financial_reports", "donation_management", "board_portal"],
+      "document_access": ["bank_statements", "accounting_records", "financial_reports", "meeting_minutes", "contracts"],
+      "external_tools": {"quickbooks": "admin", "google_drive": "edit"}
+    },
+    {
+      "id": "secretary",
+      "name": "Secretary",
+      "description": "Records and documentation management",
+      "permissions": ["admin_dashboard", "user_management", "board_portal"],
+      "document_access": ["meeting_minutes:edit", "admin_documents:edit", "playbooks:edit", "policies:edit", "financial_reports:view"],
+      "external_tools": {"notion": "admin", "google_drive": "admin"}
+    },
+    {
+      "id": "board_member",
+      "name": "Board Member",
+      "description": "Voting board member",
+      "permissions": ["board_portal"],
+      "document_access": ["meeting_minutes:view", "policies:view", "admin_documents:view", "playbooks:view"],
+      "external_tools": {"notion": "view", "google_drive": "view"}
+    },
+    {
+      "id": "staff",
+      "name": "Staff",
+      "description": "Paid staff member with role-specific access",
+      "permissions": ["role_specific"],
+      "document_access": ["role_specific"],
+      "external_tools": {"notion": "view", "google_drive": "view"}
     }
   ],
   "database": {
@@ -384,6 +433,102 @@
           {"name": "updated_at", "type": "timestamptz", "default": "now()"}
         ],
         "indexes": ["slug", "is_active", "start_date", "end_date"]
+      },
+      {
+        "name": "staff_board_members",
+        "description": "Staff and board member profiles with role-based document/system access",
+        "columns": [
+          {"name": "id", "type": "uuid", "primary_key": true, "default": "gen_random_uuid()"},
+          {"name": "user_id", "type": "uuid", "foreign_key": "auth.users.id", "unique": true, "nullable": false},
+          {"name": "first_name", "type": "varchar(100)", "nullable": false},
+          {"name": "last_name", "type": "varchar(100)", "nullable": false},
+          {"name": "email", "type": "varchar(255)", "unique": true, "nullable": false},
+          {"name": "phone", "type": "varchar(20)", "nullable": true},
+          {"name": "position", "type": "varchar(50)", "nullable": false, "enum": ["founder", "president", "vice_president", "treasurer", "secretary", "board_member", "staff"]},
+          {"name": "title", "type": "varchar(255)", "nullable": true},
+          {"name": "department", "type": "varchar(100)", "nullable": true, "enum": ["executive", "finance", "operations", "programs", "development", "communications"]},
+          {"name": "is_voting_member", "type": "boolean", "default": false},
+          {"name": "term_start_date", "type": "date", "nullable": true},
+          {"name": "term_end_date", "type": "date", "nullable": true},
+          {"name": "employment_type", "type": "varchar(30)", "nullable": true, "enum": ["volunteer_board", "part_time", "full_time", "contractor"]},
+          {"name": "bio", "type": "text", "nullable": true},
+          {"name": "photo_url", "type": "varchar(500)", "nullable": true},
+          {"name": "is_active", "type": "boolean", "default": true},
+          {"name": "permissions", "type": "jsonb", "nullable": true},
+          {"name": "external_integrations", "type": "jsonb", "nullable": true},
+          {"name": "created_at", "type": "timestamptz", "default": "now()"},
+          {"name": "updated_at", "type": "timestamptz", "default": "now()"}
+        ],
+        "indexes": ["user_id", "email", "position", "is_active"],
+        "permission_schema": {
+          "documents": {
+            "bank_statements": {"values": ["none", "view", "download"]},
+            "accounting_records": {"values": ["none", "view", "download", "edit"]},
+            "financial_reports": {"values": ["none", "view", "download"]},
+            "meeting_minutes": {"values": ["none", "view", "edit"]},
+            "admin_documents": {"values": ["none", "view", "edit"]},
+            "playbooks": {"values": ["none", "view", "edit"]},
+            "policies": {"values": ["none", "view", "edit"]},
+            "contracts": {"values": ["none", "view", "download", "edit"]}
+          },
+          "systems": {
+            "admin_dashboard": {"type": "boolean"},
+            "financial_reports": {"type": "boolean"},
+            "donation_management": {"type": "boolean"},
+            "user_management": {"type": "boolean"},
+            "board_portal": {"type": "boolean"}
+          },
+          "external_tools": {
+            "notion": {"values": ["none", "view", "edit", "admin"]},
+            "quickbooks": {"values": ["none", "view", "edit", "admin"]},
+            "google_drive": {"values": ["none", "view", "edit", "admin"]}
+          }
+        }
+      },
+      {
+        "name": "documents",
+        "description": "Organizational documents with role-based access control",
+        "columns": [
+          {"name": "id", "type": "uuid", "primary_key": true, "default": "gen_random_uuid()"},
+          {"name": "title", "type": "varchar(255)", "nullable": false},
+          {"name": "description", "type": "text", "nullable": true},
+          {"name": "document_type", "type": "varchar(50)", "nullable": false, "enum": ["bank_statement", "accounting_record", "financial_report", "meeting_minutes", "admin_document", "playbook", "policy", "contract", "tax_document", "grant_application", "board_resolution", "other"]},
+          {"name": "category", "type": "varchar(50)", "nullable": true, "enum": ["financial", "governance", "operations", "legal", "hr", "programs", "communications"]},
+          {"name": "file_url", "type": "varchar(500)", "nullable": false},
+          {"name": "file_name", "type": "varchar(255)", "nullable": false},
+          {"name": "file_size_bytes", "type": "integer", "nullable": true},
+          {"name": "mime_type", "type": "varchar(100)", "nullable": true},
+          {"name": "version", "type": "integer", "default": 1},
+          {"name": "parent_document_id", "type": "uuid", "foreign_key": "documents.id", "nullable": true},
+          {"name": "uploaded_by", "type": "uuid", "foreign_key": "auth.users.id", "nullable": false},
+          {"name": "fiscal_year", "type": "integer", "nullable": true},
+          {"name": "fiscal_month", "type": "integer", "nullable": true},
+          {"name": "meeting_date", "type": "date", "nullable": true},
+          {"name": "effective_date", "type": "date", "nullable": true},
+          {"name": "expiration_date", "type": "date", "nullable": true},
+          {"name": "is_confidential", "type": "boolean", "default": false},
+          {"name": "is_archived", "type": "boolean", "default": false},
+          {"name": "tags", "type": "text[]", "nullable": true},
+          {"name": "metadata", "type": "jsonb", "nullable": true},
+          {"name": "created_at", "type": "timestamptz", "default": "now()"},
+          {"name": "updated_at", "type": "timestamptz", "default": "now()"}
+        ],
+        "indexes": ["document_type", "category", "uploaded_by", "fiscal_year", "meeting_date", "is_archived", "created_at"]
+      },
+      {
+        "name": "document_access_log",
+        "description": "Audit trail for document access and modifications",
+        "columns": [
+          {"name": "id", "type": "uuid", "primary_key": true, "default": "gen_random_uuid()"},
+          {"name": "document_id", "type": "uuid", "foreign_key": "documents.id", "nullable": false},
+          {"name": "user_id", "type": "uuid", "foreign_key": "auth.users.id", "nullable": false},
+          {"name": "action", "type": "varchar(30)", "nullable": false, "enum": ["view", "download", "upload", "edit", "delete", "share", "permission_change"]},
+          {"name": "ip_address", "type": "inet", "nullable": true},
+          {"name": "user_agent", "type": "text", "nullable": true},
+          {"name": "details", "type": "jsonb", "nullable": true},
+          {"name": "created_at", "type": "timestamptz", "default": "now()"}
+        ],
+        "indexes": ["document_id", "user_id", "action", "created_at"]
       }
     ]
   },
@@ -445,11 +590,26 @@
       {
         "path": "/admin",
         "name": "Admin Dashboard",
-        "subpages": ["/admin", "/admin/volunteers", "/admin/partners", "/admin/clients", "/admin/referrals", "/admin/programs", "/admin/donations", "/admin/hours", "/admin/food-banks", "/admin/services", "/admin/users"],
+        "subpages": ["/admin", "/admin/volunteers", "/admin/partners", "/admin/clients", "/admin/referrals", "/admin/programs", "/admin/donations", "/admin/hours", "/admin/food-banks", "/admin/services", "/admin/users", "/admin/board", "/admin/documents"],
         "auth_required": true,
         "role_required": ["admin", "super_admin", "coordinator"],
         "tables": ["all"],
         "shadcn_components": ["DataTable", "Form", "Dialog", "Sheet", "Tabs", "Card", "Badge", "Sidebar", "Command", "DropdownMenu", "Toast"]
+      },
+      {
+        "path": "/board",
+        "name": "Board Portal",
+        "description": "Board and staff portal for governance and document access",
+        "subpages": ["/board", "/board/documents", "/board/documents/[type]", "/board/meetings", "/board/financials", "/board/members", "/board/profile"],
+        "auth_required": true,
+        "role_required": ["founder", "president", "vice_president", "treasurer", "secretary", "board_member"],
+        "tables": ["staff_board_members", "documents", "document_access_log"],
+        "shadcn_components": ["DataTable", "Form", "Dialog", "Tabs", "Card", "Badge", "Avatar", "Sidebar", "Toast"],
+        "permission_notes": {
+          "documents": "Filtered based on document_type and user position permissions",
+          "financials": "Only accessible to founder, president, treasurer, vice_president",
+          "audit_logging": "All document views/downloads logged to document_access_log"
+        }
       }
     ]
   },
@@ -509,6 +669,25 @@
         {"step": 5, "action": "Approve/reject hours", "actor": "Admin", "table": "hours"},
         {"step": 6, "action": "Notify volunteer", "actor": "System"}
       ]
+    },
+    {
+      "id": "document_access",
+      "name": "Document Access Flow",
+      "steps": [
+        {"step": 1, "action": "Board member navigates to documents", "actor": "Board Member"},
+        {"step": 2, "action": "System checks position permissions", "actor": "System", "table": "staff_board_members"},
+        {"step": 3, "action": "Filter documents by access level", "actor": "System", "table": "documents"},
+        {"step": 4, "action": "Display accessible documents", "actor": "System"},
+        {"step": 5, "action": "User views or downloads document", "actor": "Board Member"},
+        {"step": 6, "action": "Log access to audit trail", "actor": "System", "table": "document_access_log"}
+      ],
+      "permission_matrix": {
+        "founder": "all documents - view/download/edit",
+        "president": "all documents - view/download/edit",
+        "treasurer": "financial docs - full access; others - view only",
+        "secretary": "admin docs/minutes/playbooks - edit; financial - view only",
+        "board_member": "minutes/policies - view only"
+      }
     }
   ],
   "mcp_servers": [
@@ -584,7 +763,20 @@
       {"method": "CRUD", "path": "/api/admin/services", "description": "Manage services"},
       {"method": "CRUD", "path": "/api/admin/campaigns", "description": "Manage campaigns"},
       {"method": "GET", "path": "/api/admin/donations", "description": "Donation reports"},
-      {"method": "PATCH", "path": "/api/admin/hours/[id]", "description": "Approve/reject hours"}
+      {"method": "PATCH", "path": "/api/admin/hours/[id]", "description": "Approve/reject hours"},
+      {"method": "CRUD", "path": "/api/admin/board-members", "description": "Manage board/staff members"},
+      {"method": "CRUD", "path": "/api/admin/documents", "description": "Manage documents"},
+      {"method": "GET", "path": "/api/admin/documents/access-log", "description": "View document access audit log"}
+    ],
+    "board": [
+      {"method": "GET", "path": "/api/board/me", "description": "Get current board member profile"},
+      {"method": "PATCH", "path": "/api/board/me", "description": "Update own profile (limited fields)"},
+      {"method": "GET", "path": "/api/board/documents", "description": "List accessible documents"},
+      {"method": "GET", "path": "/api/board/documents/[id]", "description": "Get document details"},
+      {"method": "GET", "path": "/api/board/documents/[id]/download", "description": "Download document (logs access)"},
+      {"method": "GET", "path": "/api/board/meetings", "description": "List meeting minutes"},
+      {"method": "GET", "path": "/api/board/financials", "description": "Get financial reports (permission-gated)"},
+      {"method": "GET", "path": "/api/board/members", "description": "List board/staff directory"}
     ]
   },
   "execution_phases": [

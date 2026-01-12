@@ -40,6 +40,16 @@ Seed & Spoon NJ is a nonprofit organization connecting volunteers, partners, and
 | **Donor** | Financial supporters | Make donations, view donation history |
 | **Client** | Service recipients | Limited access, view own case status |
 
+### Board & Staff Roles
+| Position | Description | Document Access | System Access |
+|----------|-------------|-----------------|---------------|
+| **Founder/President** | Organization founder with full authority | All documents | Full system access |
+| **Vice President** | Second in command | Policy, minutes, playbooks | Admin dashboard |
+| **Treasurer** | Financial oversight | Bank statements, accounting, financial reports | Financial reports, donations |
+| **Secretary** | Records and documentation | Meeting minutes, admin docs, playbooks (edit) | Document management, Notion |
+| **Board Member** | Voting board member | Meeting minutes, policies (read) | Board portal |
+| **Staff** | Paid staff member | Role-specific documents | Role-specific access |
+
 ---
 
 ## Backend / Database Tables
@@ -511,6 +521,135 @@ Seed & Spoon NJ is a nonprofit organization connecting volunteers, partners, and
 }
 ```
 
+#### 15. `staff_board_members`
+```json
+{
+  "table_name": "staff_board_members",
+  "status": "new",
+  "description": "Staff and board member profiles with role-based document/system access",
+  "columns": {
+    "id": { "type": "uuid", "primary_key": true, "default": "gen_random_uuid()" },
+    "user_id": { "type": "uuid", "foreign_key": "auth.users.id", "unique": true, "nullable": false },
+    "first_name": { "type": "varchar(100)", "nullable": false },
+    "last_name": { "type": "varchar(100)", "nullable": false },
+    "email": { "type": "varchar(255)", "unique": true, "nullable": false },
+    "phone": { "type": "varchar(20)", "nullable": true },
+    "position": { "type": "varchar(50)", "nullable": false, "enum": ["founder", "president", "vice_president", "treasurer", "secretary", "board_member", "staff"] },
+    "title": { "type": "varchar(255)", "nullable": true, "note": "Custom title (e.g., 'Executive Director', 'Program Manager')" },
+    "department": { "type": "varchar(100)", "nullable": true, "enum": ["executive", "finance", "operations", "programs", "development", "communications"] },
+    "is_voting_member": { "type": "boolean", "default": false, "note": "Board voting rights" },
+    "term_start_date": { "type": "date", "nullable": true },
+    "term_end_date": { "type": "date", "nullable": true },
+    "employment_type": { "type": "varchar(30)", "nullable": true, "enum": ["volunteer_board", "part_time", "full_time", "contractor"] },
+    "bio": { "type": "text", "nullable": true },
+    "photo_url": { "type": "varchar(500)", "nullable": true },
+    "is_active": { "type": "boolean", "default": true },
+    "permissions": { "type": "jsonb", "nullable": true, "note": "Granular permission overrides - see Permission Schema below" },
+    "external_integrations": { "type": "jsonb", "nullable": true, "note": "Access to external tools like Notion, QuickBooks, etc." },
+    "created_at": { "type": "timestamptz", "default": "now()" },
+    "updated_at": { "type": "timestamptz", "default": "now()" }
+  },
+  "indexes": ["user_id", "email", "position", "is_active"],
+  "rls_policies": {
+    "select": "Board/staff can view own; President/Secretary can view all",
+    "insert": "President, Secretary only",
+    "update": "President, Secretary only; Self for limited fields",
+    "delete": "President only"
+  },
+  "permission_schema": {
+    "documents": {
+      "bank_statements": { "type": "enum", "values": ["none", "view", "download"], "default_by_position": { "founder": "download", "president": "download", "treasurer": "download", "vice_president": "view", "secretary": "none", "board_member": "none", "staff": "none" }},
+      "accounting_records": { "type": "enum", "values": ["none", "view", "download", "edit"], "default_by_position": { "founder": "edit", "president": "edit", "treasurer": "edit", "vice_president": "view", "secretary": "none", "board_member": "none", "staff": "none" }},
+      "financial_reports": { "type": "enum", "values": ["none", "view", "download"], "default_by_position": { "founder": "download", "president": "download", "treasurer": "download", "vice_president": "download", "secretary": "view", "board_member": "view", "staff": "none" }},
+      "meeting_minutes": { "type": "enum", "values": ["none", "view", "edit"], "default_by_position": { "founder": "edit", "president": "edit", "treasurer": "view", "vice_president": "view", "secretary": "edit", "board_member": "view", "staff": "none" }},
+      "admin_documents": { "type": "enum", "values": ["none", "view", "edit"], "default_by_position": { "founder": "edit", "president": "edit", "treasurer": "view", "vice_president": "edit", "secretary": "edit", "board_member": "view", "staff": "view" }},
+      "playbooks": { "type": "enum", "values": ["none", "view", "edit"], "default_by_position": { "founder": "edit", "president": "edit", "treasurer": "view", "vice_president": "edit", "secretary": "edit", "board_member": "view", "staff": "view" }},
+      "policies": { "type": "enum", "values": ["none", "view", "edit"], "default_by_position": { "founder": "edit", "president": "edit", "treasurer": "view", "vice_president": "view", "secretary": "edit", "board_member": "view", "staff": "view" }},
+      "contracts": { "type": "enum", "values": ["none", "view", "download", "edit"], "default_by_position": { "founder": "edit", "president": "edit", "treasurer": "download", "vice_president": "view", "secretary": "download", "board_member": "none", "staff": "none" }}
+    },
+    "systems": {
+      "admin_dashboard": { "type": "boolean", "default_by_position": { "founder": true, "president": true, "treasurer": true, "vice_president": true, "secretary": true, "board_member": false, "staff": false }},
+      "financial_reports": { "type": "boolean", "default_by_position": { "founder": true, "president": true, "treasurer": true, "vice_president": true, "secretary": false, "board_member": false, "staff": false }},
+      "donation_management": { "type": "boolean", "default_by_position": { "founder": true, "president": true, "treasurer": true, "vice_president": false, "secretary": false, "board_member": false, "staff": false }},
+      "user_management": { "type": "boolean", "default_by_position": { "founder": true, "president": true, "treasurer": false, "vice_president": false, "secretary": true, "board_member": false, "staff": false }},
+      "board_portal": { "type": "boolean", "default_by_position": { "founder": true, "president": true, "treasurer": true, "vice_president": true, "secretary": true, "board_member": true, "staff": false }}
+    },
+    "external_tools": {
+      "notion": { "type": "enum", "values": ["none", "view", "edit", "admin"], "default_by_position": { "founder": "admin", "president": "admin", "treasurer": "view", "vice_president": "edit", "secretary": "admin", "board_member": "view", "staff": "view" }},
+      "quickbooks": { "type": "enum", "values": ["none", "view", "edit", "admin"], "default_by_position": { "founder": "admin", "president": "view", "treasurer": "admin", "vice_president": "none", "secretary": "none", "board_member": "none", "staff": "none" }},
+      "google_drive": { "type": "enum", "values": ["none", "view", "edit", "admin"], "default_by_position": { "founder": "admin", "president": "admin", "treasurer": "edit", "vice_president": "edit", "secretary": "admin", "board_member": "view", "staff": "view" }}
+    }
+  }
+}
+```
+
+#### 16. `documents`
+```json
+{
+  "table_name": "documents",
+  "status": "new",
+  "description": "Organizational documents with role-based access control",
+  "columns": {
+    "id": { "type": "uuid", "primary_key": true, "default": "gen_random_uuid()" },
+    "title": { "type": "varchar(255)", "nullable": false },
+    "description": { "type": "text", "nullable": true },
+    "document_type": { "type": "varchar(50)", "nullable": false, "enum": ["bank_statement", "accounting_record", "financial_report", "meeting_minutes", "admin_document", "playbook", "policy", "contract", "tax_document", "grant_application", "board_resolution", "other"] },
+    "category": { "type": "varchar(50)", "nullable": true, "enum": ["financial", "governance", "operations", "legal", "hr", "programs", "communications"] },
+    "file_url": { "type": "varchar(500)", "nullable": false, "note": "Supabase Storage URL" },
+    "file_name": { "type": "varchar(255)", "nullable": false },
+    "file_size_bytes": { "type": "integer", "nullable": true },
+    "mime_type": { "type": "varchar(100)", "nullable": true },
+    "version": { "type": "integer", "default": 1 },
+    "parent_document_id": { "type": "uuid", "foreign_key": "documents.id", "nullable": true, "note": "For version tracking" },
+    "uploaded_by": { "type": "uuid", "foreign_key": "auth.users.id", "nullable": false },
+    "fiscal_year": { "type": "integer", "nullable": true, "note": "For financial documents" },
+    "fiscal_month": { "type": "integer", "nullable": true },
+    "meeting_date": { "type": "date", "nullable": true, "note": "For meeting minutes" },
+    "effective_date": { "type": "date", "nullable": true, "note": "For policies/contracts" },
+    "expiration_date": { "type": "date", "nullable": true },
+    "is_confidential": { "type": "boolean", "default": false },
+    "is_archived": { "type": "boolean", "default": false },
+    "tags": { "type": "text[]", "nullable": true },
+    "metadata": { "type": "jsonb", "nullable": true },
+    "created_at": { "type": "timestamptz", "default": "now()" },
+    "updated_at": { "type": "timestamptz", "default": "now()" }
+  },
+  "indexes": ["document_type", "category", "uploaded_by", "fiscal_year", "meeting_date", "is_archived", "created_at"],
+  "rls_policies": {
+    "select": "Based on document_type and user's position permissions",
+    "insert": "Based on document_type and user's edit permissions",
+    "update": "Based on document_type and user's edit permissions",
+    "delete": "President, Founder only"
+  }
+}
+```
+
+#### 17. `document_access_log`
+```json
+{
+  "table_name": "document_access_log",
+  "status": "new",
+  "description": "Audit trail for document access and modifications",
+  "columns": {
+    "id": { "type": "uuid", "primary_key": true, "default": "gen_random_uuid()" },
+    "document_id": { "type": "uuid", "foreign_key": "documents.id", "nullable": false },
+    "user_id": { "type": "uuid", "foreign_key": "auth.users.id", "nullable": false },
+    "action": { "type": "varchar(30)", "nullable": false, "enum": ["view", "download", "upload", "edit", "delete", "share", "permission_change"] },
+    "ip_address": { "type": "inet", "nullable": true },
+    "user_agent": { "type": "text", "nullable": true },
+    "details": { "type": "jsonb", "nullable": true, "note": "Additional context about the action" },
+    "created_at": { "type": "timestamptz", "default": "now()" }
+  },
+  "indexes": ["document_id", "user_id", "action", "created_at"],
+  "rls_policies": {
+    "select": "President, Founder, Secretary only",
+    "insert": "System/service role only (automatic logging)",
+    "update": "Disabled",
+    "delete": "Disabled"
+  }
+}
+```
+
 ---
 
 ### Entity Relationship Diagram (ERD)
@@ -913,7 +1052,11 @@ Seed & Spoon NJ is a nonprofit organization connecting volunteers, partners, and
     "/admin/hours": "Hour approval queue",
     "/admin/food-banks": "Food bank management",
     "/admin/services": "Service management",
-    "/admin/users": "User/admin management"
+    "/admin/users": "User/admin management",
+    "/admin/board": "Board & staff management",
+    "/admin/board/[id]": "Board member detail",
+    "/admin/documents": "Document management",
+    "/admin/documents/[id]": "Document detail/versions"
   },
   "shadcn_components": {
     "forms": ["Form", "Input", "Select", "DatePicker", "Switch", "Combobox"],
@@ -934,15 +1077,70 @@ Seed & Spoon NJ is a nonprofit organization connecting volunteers, partners, and
     "CRUD /api/admin/programs": "Program management",
     "CRUD /api/admin/campaigns": "Campaign management",
     "GET /api/admin/donations": "Donation reports",
-    "PATCH /api/admin/hours/[id]": "Approve/reject hours"
+    "PATCH /api/admin/hours/[id]": "Approve/reject hours",
+    "CRUD /api/admin/board-members": "Board/staff management",
+    "CRUD /api/admin/documents": "Document management",
+    "GET /api/admin/documents/access-log": "Document access audit log"
   },
   "workflows": {
     "overview": "View stats → Identify action items → Navigate to relevant section",
     "volunteer_mgmt": "List volunteers → Filter/search → View details → Update status",
-    "hour_approval": "View pending hours → Review → Approve/reject → Notify volunteer"
+    "hour_approval": "View pending hours → Review → Approve/reject → Notify volunteer",
+    "board_mgmt": "List board/staff → Add/edit members → Set permissions → Track terms",
+    "document_mgmt": "Upload document → Set type/category → Auto-apply permissions → Track access"
   },
   "auth_required": true,
   "role_required": ["admin", "super_admin", "coordinator"]
+}
+```
+
+#### 11. Board Portal (`/board`)
+```json
+{
+  "page": "/board",
+  "status": "new",
+  "description": "Board and staff portal for governance and document access",
+  "subpages": {
+    "/board": "Board dashboard",
+    "/board/documents": "Document library",
+    "/board/documents/[type]": "Documents filtered by type",
+    "/board/documents/view/[id]": "View document",
+    "/board/meetings": "Meeting minutes archive",
+    "/board/meetings/[id]": "Meeting detail",
+    "/board/financials": "Financial reports (Treasurer+ access)",
+    "/board/members": "Board member directory",
+    "/board/profile": "Edit own profile"
+  },
+  "shadcn_components": {
+    "forms": ["Form", "Input", "Select", "Textarea", "DatePicker"],
+    "data": ["DataTable", "Badge", "Pagination"],
+    "display": ["Card", "Dialog", "Tabs", "Avatar", "Separator", "AspectRatio"],
+    "feedback": ["Alert", "Toast", "Skeleton"],
+    "navigation": ["Sidebar", "Breadcrumb", "Tabs"]
+  },
+  "backend_tables": ["staff_board_members", "documents", "document_access_log"],
+  "api_endpoints": {
+    "GET /api/board/me": "Get current board member profile",
+    "PATCH /api/board/me": "Update own profile (limited fields)",
+    "GET /api/board/documents": "List accessible documents",
+    "GET /api/board/documents/[id]": "Get document details",
+    "GET /api/board/documents/[id]/download": "Download document (logs access)",
+    "GET /api/board/meetings": "List meeting minutes",
+    "GET /api/board/financials": "Get financial reports (permission-gated)",
+    "GET /api/board/members": "List board/staff directory"
+  },
+  "workflows": {
+    "view_documents": "Navigate to documents → Filter by type → Click to view/download → Access logged",
+    "financial_access": "Click financials → System checks position permissions → Display or deny",
+    "meeting_minutes": "View meetings list → Select meeting → View/download minutes"
+  },
+  "auth_required": true,
+  "role_required": ["founder", "president", "vice_president", "treasurer", "secretary", "board_member"],
+  "permission_notes": {
+    "documents": "Filtered based on document_type and user's position permissions from staff_board_members table",
+    "financials": "Only accessible to founder, president, treasurer, vice_president",
+    "audit_logging": "All document views/downloads are logged to document_access_log"
+  }
 }
 ```
 
@@ -956,6 +1154,7 @@ Seed & Spoon NJ is a nonprofit organization connecting volunteers, partners, and
     "layout": {
       "AppLayout": "Main app layout with header/footer",
       "AdminLayout": "Admin sidebar layout",
+      "BoardLayout": "Board portal layout with role-based navigation",
       "AuthLayout": "Centered auth form layout"
     },
     "auth": {
