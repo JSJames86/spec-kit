@@ -1,0 +1,670 @@
+{
+  "$schema": "https://seedandspoon.org/schemas/spec-kit-blueprint.json",
+  "version": "1.0.0",
+  "project": {
+    "name": "Seed & Spoon NJ",
+    "type": "nonprofit_crm",
+    "description": "Nonprofit CRM & Volunteer Management Platform for food insecurity relief",
+    "created": "2026-01-12",
+    "status": "planning"
+  },
+  "tech_stack": {
+    "frontend": {
+      "framework": "Next.js 14+",
+      "language": "TypeScript",
+      "ui_library": "Shadcn/ui",
+      "styling": "Tailwind CSS",
+      "state_management": "React Context + Tanstack Query"
+    },
+    "backend": {
+      "database": "Supabase (PostgreSQL)",
+      "auth": "Supabase Auth",
+      "storage": "Supabase Storage",
+      "functions": "Supabase Edge Functions"
+    },
+    "integrations": {
+      "payments": "Stripe",
+      "email": "SendGrid/Resend",
+      "deployment": "Vercel"
+    },
+    "testing": {
+      "e2e": "Playwright",
+      "unit": "Vitest"
+    }
+  },
+  "roles": [
+    {
+      "id": "super_admin",
+      "name": "Super Admin",
+      "description": "Full system access, can manage other admins",
+      "permissions": ["*"]
+    },
+    {
+      "id": "admin",
+      "name": "Admin",
+      "description": "Standard administrative access",
+      "permissions": ["volunteers:*", "partners:*", "clients:*", "referrals:*", "programs:*", "donations:read", "hours:*", "food_banks:*", "services:*", "campaigns:*"]
+    },
+    {
+      "id": "coordinator",
+      "name": "Coordinator",
+      "description": "Program and referral coordination",
+      "permissions": ["volunteers:read", "volunteers:update", "referrals:*", "programs:*", "hours:*", "clients:read", "clients:update"]
+    },
+    {
+      "id": "volunteer",
+      "name": "Volunteer",
+      "description": "Registered volunteer",
+      "permissions": ["volunteers:read:own", "volunteers:update:own", "programs:read", "hours:read:own", "hours:create:own", "referrals:read:assigned"]
+    },
+    {
+      "id": "partner",
+      "name": "Partner",
+      "description": "Partner organization",
+      "permissions": ["partners:read:own", "partners:update:own", "referrals:read:own", "referrals:create", "services:read"]
+    },
+    {
+      "id": "donor",
+      "name": "Donor",
+      "description": "Financial donor",
+      "permissions": ["donations:read:own", "campaigns:read"]
+    },
+    {
+      "id": "client",
+      "name": "Client",
+      "description": "Service recipient",
+      "permissions": ["clients:read:own", "client_services:read:own"]
+    }
+  ],
+  "database": {
+    "existing_tables": [
+      {
+        "name": "volunteers",
+        "description": "Registered volunteer profiles",
+        "columns": [
+          {"name": "id", "type": "uuid", "primary_key": true, "default": "gen_random_uuid()"},
+          {"name": "user_id", "type": "uuid", "foreign_key": "auth.users.id", "nullable": false},
+          {"name": "first_name", "type": "varchar(100)", "nullable": false},
+          {"name": "last_name", "type": "varchar(100)", "nullable": false},
+          {"name": "email", "type": "varchar(255)", "unique": true, "nullable": false},
+          {"name": "phone", "type": "varchar(20)", "nullable": true},
+          {"name": "address", "type": "text", "nullable": true},
+          {"name": "city", "type": "varchar(100)", "nullable": true},
+          {"name": "state", "type": "varchar(2)", "default": "'NJ'"},
+          {"name": "zip_code", "type": "varchar(10)", "nullable": true},
+          {"name": "availability", "type": "jsonb", "nullable": true},
+          {"name": "skills", "type": "text[]", "nullable": true},
+          {"name": "status", "type": "varchar(20)", "default": "'pending'", "enum": ["pending", "active", "inactive", "suspended"]},
+          {"name": "background_check_status", "type": "varchar(20)", "default": "'not_started'"},
+          {"name": "created_at", "type": "timestamptz", "default": "now()"},
+          {"name": "updated_at", "type": "timestamptz", "default": "now()"}
+        ],
+        "indexes": ["user_id", "email", "status"]
+      },
+      {
+        "name": "admin_users",
+        "description": "Administrative user accounts",
+        "columns": [
+          {"name": "id", "type": "uuid", "primary_key": true, "default": "gen_random_uuid()"},
+          {"name": "user_id", "type": "uuid", "foreign_key": "auth.users.id", "unique": true, "nullable": false},
+          {"name": "role", "type": "varchar(50)", "default": "'admin'", "enum": ["super_admin", "admin", "coordinator"]},
+          {"name": "permissions", "type": "jsonb", "nullable": true},
+          {"name": "created_at", "type": "timestamptz", "default": "now()"},
+          {"name": "updated_at", "type": "timestamptz", "default": "now()"}
+        ],
+        "indexes": ["user_id", "role"]
+      },
+      {
+        "name": "donations",
+        "description": "Financial donation records",
+        "columns": [
+          {"name": "id", "type": "uuid", "primary_key": true, "default": "gen_random_uuid()"},
+          {"name": "user_id", "type": "uuid", "foreign_key": "auth.users.id", "nullable": true},
+          {"name": "stripe_payment_intent_id", "type": "varchar(255)", "unique": true, "nullable": false},
+          {"name": "stripe_customer_id", "type": "varchar(255)", "nullable": true},
+          {"name": "amount_cents", "type": "integer", "nullable": false},
+          {"name": "currency", "type": "varchar(3)", "default": "'usd'"},
+          {"name": "status", "type": "varchar(20)", "enum": ["pending", "succeeded", "failed", "refunded"]},
+          {"name": "donation_type", "type": "varchar(20)", "enum": ["one_time", "recurring"]},
+          {"name": "donor_name", "type": "varchar(255)", "nullable": true},
+          {"name": "donor_email", "type": "varchar(255)", "nullable": true},
+          {"name": "is_anonymous", "type": "boolean", "default": false},
+          {"name": "campaign_id", "type": "uuid", "foreign_key": "campaigns.id", "nullable": true},
+          {"name": "notes", "type": "text", "nullable": true},
+          {"name": "metadata", "type": "jsonb", "nullable": true},
+          {"name": "created_at", "type": "timestamptz", "default": "now()"},
+          {"name": "updated_at", "type": "timestamptz", "default": "now()"}
+        ],
+        "indexes": ["user_id", "stripe_payment_intent_id", "status", "created_at"]
+      },
+      {
+        "name": "food_banks",
+        "description": "Food bank/pantry locations",
+        "columns": [
+          {"name": "id", "type": "uuid", "primary_key": true, "default": "gen_random_uuid()"},
+          {"name": "name", "type": "varchar(255)", "nullable": false},
+          {"name": "address", "type": "text", "nullable": false},
+          {"name": "city", "type": "varchar(100)", "nullable": false},
+          {"name": "state", "type": "varchar(2)", "default": "'NJ'"},
+          {"name": "zip_code", "type": "varchar(10)", "nullable": false},
+          {"name": "latitude", "type": "decimal(10,8)", "nullable": true},
+          {"name": "longitude", "type": "decimal(11,8)", "nullable": true},
+          {"name": "phone", "type": "varchar(20)", "nullable": true},
+          {"name": "email", "type": "varchar(255)", "nullable": true},
+          {"name": "website", "type": "varchar(255)", "nullable": true},
+          {"name": "hours_of_operation", "type": "jsonb", "nullable": true},
+          {"name": "services_offered", "type": "text[]", "nullable": true},
+          {"name": "capacity", "type": "integer", "nullable": true},
+          {"name": "is_active", "type": "boolean", "default": true},
+          {"name": "contact_person", "type": "varchar(255)", "nullable": true},
+          {"name": "notes", "type": "text", "nullable": true},
+          {"name": "created_at", "type": "timestamptz", "default": "now()"},
+          {"name": "updated_at", "type": "timestamptz", "default": "now()"}
+        ],
+        "indexes": ["city", "zip_code", "is_active"]
+      },
+      {
+        "name": "services",
+        "description": "Types of services offered",
+        "columns": [
+          {"name": "id", "type": "uuid", "primary_key": true, "default": "gen_random_uuid()"},
+          {"name": "name", "type": "varchar(255)", "nullable": false},
+          {"name": "description", "type": "text", "nullable": true},
+          {"name": "category", "type": "varchar(100)", "nullable": true, "enum": ["food_distribution", "meal_delivery", "nutrition_education", "emergency_assistance", "other"]},
+          {"name": "is_active", "type": "boolean", "default": true},
+          {"name": "eligibility_requirements", "type": "text", "nullable": true},
+          {"name": "created_at", "type": "timestamptz", "default": "now()"},
+          {"name": "updated_at", "type": "timestamptz", "default": "now()"}
+        ],
+        "indexes": ["category", "is_active"]
+      },
+      {
+        "name": "hours",
+        "description": "Volunteer hour tracking",
+        "columns": [
+          {"name": "id", "type": "uuid", "primary_key": true, "default": "gen_random_uuid()"},
+          {"name": "volunteer_id", "type": "uuid", "foreign_key": "volunteers.id", "nullable": false},
+          {"name": "program_id", "type": "uuid", "foreign_key": "programs.id", "nullable": true},
+          {"name": "date", "type": "date", "nullable": false},
+          {"name": "hours_worked", "type": "decimal(4,2)", "nullable": false},
+          {"name": "description", "type": "text", "nullable": true},
+          {"name": "status", "type": "varchar(20)", "default": "'pending'", "enum": ["pending", "approved", "rejected"]},
+          {"name": "approved_by", "type": "uuid", "foreign_key": "admin_users.id", "nullable": true},
+          {"name": "approved_at", "type": "timestamptz", "nullable": true},
+          {"name": "created_at", "type": "timestamptz", "default": "now()"},
+          {"name": "updated_at", "type": "timestamptz", "default": "now()"}
+        ],
+        "indexes": ["volunteer_id", "program_id", "date", "status"]
+      }
+    ],
+    "new_tables": [
+      {
+        "name": "clients",
+        "description": "Service recipients / beneficiaries",
+        "columns": [
+          {"name": "id", "type": "uuid", "primary_key": true, "default": "gen_random_uuid()"},
+          {"name": "user_id", "type": "uuid", "foreign_key": "auth.users.id", "nullable": true},
+          {"name": "first_name", "type": "varchar(100)", "nullable": false},
+          {"name": "last_name", "type": "varchar(100)", "nullable": false},
+          {"name": "email", "type": "varchar(255)", "nullable": true},
+          {"name": "phone", "type": "varchar(20)", "nullable": true},
+          {"name": "address", "type": "text", "nullable": true},
+          {"name": "city", "type": "varchar(100)", "nullable": true},
+          {"name": "state", "type": "varchar(2)", "default": "'NJ'"},
+          {"name": "zip_code", "type": "varchar(10)", "nullable": true},
+          {"name": "household_size", "type": "integer", "nullable": true},
+          {"name": "dietary_restrictions", "type": "text[]", "nullable": true},
+          {"name": "languages_spoken", "type": "text[]", "default": "'{\"English\"}'"},
+          {"name": "income_bracket", "type": "varchar(50)", "nullable": true},
+          {"name": "is_veteran", "type": "boolean", "default": false},
+          {"name": "is_senior", "type": "boolean", "default": false},
+          {"name": "has_children", "type": "boolean", "default": false},
+          {"name": "special_needs", "type": "text", "nullable": true},
+          {"name": "status", "type": "varchar(20)", "default": "'active'", "enum": ["active", "inactive", "archived"]},
+          {"name": "intake_date", "type": "date", "default": "current_date"},
+          {"name": "referred_by", "type": "uuid", "foreign_key": "partners.id", "nullable": true},
+          {"name": "notes", "type": "text", "nullable": true},
+          {"name": "created_at", "type": "timestamptz", "default": "now()"},
+          {"name": "updated_at", "type": "timestamptz", "default": "now()"}
+        ],
+        "indexes": ["user_id", "email", "zip_code", "status", "intake_date"]
+      },
+      {
+        "name": "partners",
+        "description": "Partner organizations",
+        "columns": [
+          {"name": "id", "type": "uuid", "primary_key": true, "default": "gen_random_uuid()"},
+          {"name": "user_id", "type": "uuid", "foreign_key": "auth.users.id", "nullable": true},
+          {"name": "organization_name", "type": "varchar(255)", "nullable": false},
+          {"name": "organization_type", "type": "varchar(100)", "enum": ["church", "school", "social_services", "healthcare", "government", "nonprofit", "business", "other"]},
+          {"name": "contact_name", "type": "varchar(255)", "nullable": false},
+          {"name": "contact_email", "type": "varchar(255)", "nullable": false},
+          {"name": "contact_phone", "type": "varchar(20)", "nullable": true},
+          {"name": "address", "type": "text", "nullable": true},
+          {"name": "city", "type": "varchar(100)", "nullable": true},
+          {"name": "state", "type": "varchar(2)", "default": "'NJ'"},
+          {"name": "zip_code", "type": "varchar(10)", "nullable": true},
+          {"name": "website", "type": "varchar(255)", "nullable": true},
+          {"name": "partnership_type", "type": "varchar(50)", "enum": ["referral_source", "service_provider", "funding_partner", "volunteer_source", "other"]},
+          {"name": "mou_signed", "type": "boolean", "default": false},
+          {"name": "mou_signed_date", "type": "date", "nullable": true},
+          {"name": "status", "type": "varchar(20)", "default": "'pending'", "enum": ["pending", "active", "inactive", "suspended"]},
+          {"name": "notes", "type": "text", "nullable": true},
+          {"name": "created_at", "type": "timestamptz", "default": "now()"},
+          {"name": "updated_at", "type": "timestamptz", "default": "now()"}
+        ],
+        "indexes": ["user_id", "organization_type", "partnership_type", "status"]
+      },
+      {
+        "name": "programs",
+        "description": "Volunteer programs and initiatives",
+        "columns": [
+          {"name": "id", "type": "uuid", "primary_key": true, "default": "gen_random_uuid()"},
+          {"name": "name", "type": "varchar(255)", "nullable": false},
+          {"name": "description", "type": "text", "nullable": true},
+          {"name": "program_type", "type": "varchar(100)", "enum": ["food_distribution", "meal_delivery", "community_garden", "education", "fundraising", "administrative", "other"]},
+          {"name": "service_id", "type": "uuid", "foreign_key": "services.id", "nullable": true},
+          {"name": "food_bank_id", "type": "uuid", "foreign_key": "food_banks.id", "nullable": true},
+          {"name": "coordinator_id", "type": "uuid", "foreign_key": "admin_users.id", "nullable": true},
+          {"name": "start_date", "type": "date", "nullable": true},
+          {"name": "end_date", "type": "date", "nullable": true},
+          {"name": "recurrence", "type": "varchar(50)", "nullable": true, "enum": ["one_time", "daily", "weekly", "biweekly", "monthly"]},
+          {"name": "schedule", "type": "jsonb", "nullable": true},
+          {"name": "location", "type": "text", "nullable": true},
+          {"name": "max_volunteers", "type": "integer", "nullable": true},
+          {"name": "min_volunteers", "type": "integer", "nullable": true},
+          {"name": "requirements", "type": "text[]", "nullable": true},
+          {"name": "is_active", "type": "boolean", "default": true},
+          {"name": "created_at", "type": "timestamptz", "default": "now()"},
+          {"name": "updated_at", "type": "timestamptz", "default": "now()"}
+        ],
+        "indexes": ["program_type", "service_id", "food_bank_id", "is_active", "start_date"]
+      },
+      {
+        "name": "referrals",
+        "description": "Client referrals from partners",
+        "columns": [
+          {"name": "id", "type": "uuid", "primary_key": true, "default": "gen_random_uuid()"},
+          {"name": "referral_number", "type": "varchar(20)", "unique": true, "nullable": false},
+          {"name": "partner_id", "type": "uuid", "foreign_key": "partners.id", "nullable": false},
+          {"name": "client_id", "type": "uuid", "foreign_key": "clients.id", "nullable": true},
+          {"name": "service_id", "type": "uuid", "foreign_key": "services.id", "nullable": false},
+          {"name": "assigned_volunteer_id", "type": "uuid", "foreign_key": "volunteers.id", "nullable": true},
+          {"name": "assigned_food_bank_id", "type": "uuid", "foreign_key": "food_banks.id", "nullable": true},
+          {"name": "client_first_name", "type": "varchar(100)", "nullable": false},
+          {"name": "client_last_name", "type": "varchar(100)", "nullable": false},
+          {"name": "client_phone", "type": "varchar(20)", "nullable": true},
+          {"name": "client_email", "type": "varchar(255)", "nullable": true},
+          {"name": "client_address", "type": "text", "nullable": true},
+          {"name": "client_city", "type": "varchar(100)", "nullable": true},
+          {"name": "client_zip_code", "type": "varchar(10)", "nullable": true},
+          {"name": "household_size", "type": "integer", "nullable": true},
+          {"name": "urgency", "type": "varchar(20)", "default": "'normal'", "enum": ["low", "normal", "high", "emergency"]},
+          {"name": "status", "type": "varchar(30)", "default": "'submitted'", "enum": ["submitted", "under_review", "accepted", "assigned", "in_progress", "completed", "closed", "rejected"]},
+          {"name": "reason_for_referral", "type": "text", "nullable": true},
+          {"name": "special_instructions", "type": "text", "nullable": true},
+          {"name": "intake_completed", "type": "boolean", "default": false},
+          {"name": "intake_completed_at", "type": "timestamptz", "nullable": true},
+          {"name": "intake_completed_by", "type": "uuid", "foreign_key": "admin_users.id", "nullable": true},
+          {"name": "outcome", "type": "text", "nullable": true},
+          {"name": "outcome_date", "type": "date", "nullable": true},
+          {"name": "follow_up_required", "type": "boolean", "default": false},
+          {"name": "follow_up_date", "type": "date", "nullable": true},
+          {"name": "notes", "type": "text", "nullable": true},
+          {"name": "created_at", "type": "timestamptz", "default": "now()"},
+          {"name": "updated_at", "type": "timestamptz", "default": "now()"}
+        ],
+        "indexes": ["referral_number", "partner_id", "client_id", "service_id", "assigned_volunteer_id", "status", "urgency", "created_at"]
+      },
+      {
+        "name": "volunteer_programs",
+        "description": "Junction: Volunteers assigned to Programs",
+        "columns": [
+          {"name": "id", "type": "uuid", "primary_key": true, "default": "gen_random_uuid()"},
+          {"name": "volunteer_id", "type": "uuid", "foreign_key": "volunteers.id", "nullable": false},
+          {"name": "program_id", "type": "uuid", "foreign_key": "programs.id", "nullable": false},
+          {"name": "role", "type": "varchar(50)", "default": "'participant'", "enum": ["participant", "team_lead", "coordinator"]},
+          {"name": "status", "type": "varchar(20)", "default": "'active'", "enum": ["pending", "active", "completed", "withdrawn"]},
+          {"name": "joined_at", "type": "timestamptz", "default": "now()"},
+          {"name": "left_at", "type": "timestamptz", "nullable": true},
+          {"name": "notes", "type": "text", "nullable": true}
+        ],
+        "indexes": ["volunteer_id", "program_id", "status"],
+        "constraints": {"unique": ["volunteer_id", "program_id"]}
+      },
+      {
+        "name": "client_services",
+        "description": "Junction: Clients receiving Services",
+        "columns": [
+          {"name": "id", "type": "uuid", "primary_key": true, "default": "gen_random_uuid()"},
+          {"name": "client_id", "type": "uuid", "foreign_key": "clients.id", "nullable": false},
+          {"name": "service_id", "type": "uuid", "foreign_key": "services.id", "nullable": false},
+          {"name": "referral_id", "type": "uuid", "foreign_key": "referrals.id", "nullable": true},
+          {"name": "food_bank_id", "type": "uuid", "foreign_key": "food_banks.id", "nullable": true},
+          {"name": "start_date", "type": "date", "default": "current_date"},
+          {"name": "end_date", "type": "date", "nullable": true},
+          {"name": "frequency", "type": "varchar(50)", "nullable": true, "enum": ["one_time", "weekly", "biweekly", "monthly", "as_needed"]},
+          {"name": "status", "type": "varchar(20)", "default": "'active'", "enum": ["active", "paused", "completed", "cancelled"]},
+          {"name": "notes", "type": "text", "nullable": true},
+          {"name": "created_at", "type": "timestamptz", "default": "now()"},
+          {"name": "updated_at", "type": "timestamptz", "default": "now()"}
+        ],
+        "indexes": ["client_id", "service_id", "referral_id", "status"]
+      },
+      {
+        "name": "referral_notes",
+        "description": "Activity log for referrals",
+        "columns": [
+          {"name": "id", "type": "uuid", "primary_key": true, "default": "gen_random_uuid()"},
+          {"name": "referral_id", "type": "uuid", "foreign_key": "referrals.id", "nullable": false},
+          {"name": "author_id", "type": "uuid", "foreign_key": "auth.users.id", "nullable": false},
+          {"name": "author_type", "type": "varchar(20)", "enum": ["admin", "volunteer", "partner"]},
+          {"name": "note_type", "type": "varchar(30)", "enum": ["status_change", "assignment", "contact_attempt", "service_delivery", "follow_up", "general"]},
+          {"name": "content", "type": "text", "nullable": false},
+          {"name": "is_internal", "type": "boolean", "default": false},
+          {"name": "created_at", "type": "timestamptz", "default": "now()"}
+        ],
+        "indexes": ["referral_id", "author_id", "note_type", "created_at"]
+      },
+      {
+        "name": "campaigns",
+        "description": "Donation campaigns",
+        "columns": [
+          {"name": "id", "type": "uuid", "primary_key": true, "default": "gen_random_uuid()"},
+          {"name": "name", "type": "varchar(255)", "nullable": false},
+          {"name": "slug", "type": "varchar(100)", "unique": true, "nullable": false},
+          {"name": "description", "type": "text", "nullable": true},
+          {"name": "goal_amount_cents", "type": "integer", "nullable": true},
+          {"name": "raised_amount_cents", "type": "integer", "default": 0},
+          {"name": "start_date", "type": "date", "nullable": true},
+          {"name": "end_date", "type": "date", "nullable": true},
+          {"name": "is_active", "type": "boolean", "default": true},
+          {"name": "image_url", "type": "varchar(500)", "nullable": true},
+          {"name": "created_at", "type": "timestamptz", "default": "now()"},
+          {"name": "updated_at", "type": "timestamptz", "default": "now()"}
+        ],
+        "indexes": ["slug", "is_active", "start_date", "end_date"]
+      }
+    ]
+  },
+  "frontend": {
+    "existing_pages": [
+      {
+        "path": "/",
+        "name": "Homepage",
+        "description": "Landing page with mission statement and CTAs",
+        "auth_required": false
+      }
+    ],
+    "existing_components": [
+      {"name": "Header", "description": "Global navigation header"},
+      {"name": "Footer", "description": "Global footer with links"}
+    ],
+    "new_pages": [
+      {
+        "path": "/volunteer",
+        "name": "Volunteer Portal",
+        "subpages": ["/volunteer", "/volunteer/register", "/volunteer/dashboard", "/volunteer/hours", "/volunteer/programs"],
+        "auth_required": {"register": false, "dashboard": true, "hours": true, "programs": true},
+        "tables": ["volunteers", "volunteer_programs", "programs", "hours"],
+        "shadcn_components": ["Form", "Input", "Select", "Checkbox", "Card", "Badge", "Tabs", "Calendar", "Toast"]
+      },
+      {
+        "path": "/partner",
+        "name": "Partner Portal",
+        "subpages": ["/partner", "/partner/apply", "/partner/dashboard", "/partner/referrals", "/partner/referrals/new", "/partner/referrals/[id]"],
+        "auth_required": {"apply": false, "dashboard": true, "referrals": true},
+        "tables": ["partners", "referrals", "referral_notes", "services"],
+        "shadcn_components": ["Form", "Input", "Select", "DataTable", "Dialog", "Badge", "Toast"]
+      },
+      {
+        "path": "/programs",
+        "name": "Programs",
+        "subpages": ["/programs", "/programs/[id]"],
+        "auth_required": false,
+        "tables": ["programs", "services", "food_banks"],
+        "shadcn_components": ["Card", "Badge", "Accordion", "Tabs"]
+      },
+      {
+        "path": "/donate",
+        "name": "Donate",
+        "subpages": ["/donate", "/donate/[campaign-slug]", "/donate/success", "/donate/history"],
+        "auth_required": {"donate": false, "history": true},
+        "tables": ["donations", "campaigns"],
+        "external": ["Stripe Checkout"],
+        "shadcn_components": ["Form", "Input", "RadioGroup", "Card", "Progress", "Toast"]
+      },
+      {
+        "path": "/get-help",
+        "name": "Get Help",
+        "subpages": ["/get-help", "/get-help/food-banks", "/get-help/services", "/get-help/apply"],
+        "auth_required": false,
+        "tables": ["food_banks", "services", "clients", "referrals"],
+        "shadcn_components": ["Form", "Input", "Select", "Card", "Accordion", "Tabs"]
+      },
+      {
+        "path": "/admin",
+        "name": "Admin Dashboard",
+        "subpages": ["/admin", "/admin/volunteers", "/admin/partners", "/admin/clients", "/admin/referrals", "/admin/programs", "/admin/donations", "/admin/hours", "/admin/food-banks", "/admin/services", "/admin/users"],
+        "auth_required": true,
+        "role_required": ["admin", "super_admin", "coordinator"],
+        "tables": ["all"],
+        "shadcn_components": ["DataTable", "Form", "Dialog", "Sheet", "Tabs", "Card", "Badge", "Sidebar", "Command", "DropdownMenu", "Toast"]
+      }
+    ]
+  },
+  "workflows": [
+    {
+      "id": "volunteer_registration",
+      "name": "Volunteer Registration Flow",
+      "steps": [
+        {"step": 1, "action": "Fill registration form", "actor": "Visitor"},
+        {"step": 2, "action": "Validate form data", "actor": "System"},
+        {"step": 3, "action": "Create auth user", "actor": "System", "table": "auth.users"},
+        {"step": 4, "action": "Create volunteer profile", "actor": "System", "table": "volunteers"},
+        {"step": 5, "action": "Send welcome email", "actor": "System"},
+        {"step": 6, "action": "Redirect to dashboard", "actor": "System"}
+      ]
+    },
+    {
+      "id": "referral_submission",
+      "name": "Partner Referral Submission",
+      "steps": [
+        {"step": 1, "action": "Partner creates referral", "actor": "Partner", "table": "referrals"},
+        {"step": 2, "action": "Generate referral number", "actor": "System"},
+        {"step": 3, "action": "Notify admin", "actor": "System"},
+        {"step": 4, "action": "Admin reviews", "actor": "Admin"},
+        {"step": 5, "action": "Accept/reject referral", "actor": "Admin", "table": "referrals"},
+        {"step": 6, "action": "Assign volunteer/food bank", "actor": "Admin", "table": "referrals"},
+        {"step": 7, "action": "Notify volunteer and partner", "actor": "System"},
+        {"step": 8, "action": "Volunteer delivers service", "actor": "Volunteer"},
+        {"step": 9, "action": "Log activity", "actor": "Volunteer", "table": "referral_notes"},
+        {"step": 10, "action": "Mark completed", "actor": "Volunteer", "table": "referrals"}
+      ],
+      "statuses": ["submitted", "under_review", "accepted", "assigned", "in_progress", "completed", "closed", "rejected"]
+    },
+    {
+      "id": "donation_flow",
+      "name": "Donation Flow",
+      "steps": [
+        {"step": 1, "action": "Select amount and type", "actor": "Donor"},
+        {"step": 2, "action": "Create Stripe checkout session", "actor": "System", "external": "Stripe"},
+        {"step": 3, "action": "Redirect to Stripe", "actor": "System"},
+        {"step": 4, "action": "Complete payment", "actor": "Donor", "external": "Stripe"},
+        {"step": 5, "action": "Receive webhook", "actor": "System", "external": "Stripe"},
+        {"step": 6, "action": "Create donation record", "actor": "System", "table": "donations"},
+        {"step": 7, "action": "Update campaign if applicable", "actor": "System", "table": "campaigns"},
+        {"step": 8, "action": "Send receipt email", "actor": "System"},
+        {"step": 9, "action": "Redirect to success page", "actor": "System"}
+      ]
+    },
+    {
+      "id": "hour_logging",
+      "name": "Volunteer Hour Logging",
+      "steps": [
+        {"step": 1, "action": "Select program and date", "actor": "Volunteer"},
+        {"step": 2, "action": "Enter hours and description", "actor": "Volunteer"},
+        {"step": 3, "action": "Submit hours", "actor": "Volunteer", "table": "hours"},
+        {"step": 4, "action": "Admin reviews", "actor": "Admin"},
+        {"step": 5, "action": "Approve/reject hours", "actor": "Admin", "table": "hours"},
+        {"step": 6, "action": "Notify volunteer", "actor": "System"}
+      ]
+    }
+  ],
+  "mcp_servers": [
+    {
+      "name": "supabase",
+      "purpose": "Backend database, authentication, storage",
+      "capabilities": ["database_crud", "authentication", "storage", "edge_functions", "realtime"],
+      "env_vars": ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"]
+    },
+    {
+      "name": "shadcn",
+      "purpose": "Frontend UI components",
+      "capabilities": ["add_component", "customize_theme"],
+      "components_path": "src/components/ui"
+    },
+    {
+      "name": "spec",
+      "purpose": "Project specification and planning",
+      "capabilities": ["create_spec", "create_plan", "generate_tasks", "analyze_consistency"]
+    },
+    {
+      "name": "playwright",
+      "purpose": "End-to-end testing (future)",
+      "status": "future",
+      "capabilities": ["run_tests", "generate_tests", "visual_regression"]
+    },
+    {
+      "name": "vercel",
+      "purpose": "Deployment and hosting",
+      "capabilities": ["deploy", "env_management", "analytics"],
+      "env_vars": ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY", "SENDGRID_API_KEY"]
+    }
+  ],
+  "api_endpoints": {
+    "public": [
+      {"method": "GET", "path": "/api/programs", "description": "List active programs"},
+      {"method": "GET", "path": "/api/programs/[id]", "description": "Get program details"},
+      {"method": "GET", "path": "/api/food-banks", "description": "List food banks"},
+      {"method": "GET", "path": "/api/food-banks/nearby", "description": "Find nearby food banks by zip"},
+      {"method": "GET", "path": "/api/services", "description": "List services"},
+      {"method": "GET", "path": "/api/campaigns", "description": "List active campaigns"},
+      {"method": "GET", "path": "/api/campaigns/[slug]", "description": "Get campaign details"},
+      {"method": "POST", "path": "/api/volunteers", "description": "Create volunteer profile"},
+      {"method": "POST", "path": "/api/partners", "description": "Submit partner application"},
+      {"method": "POST", "path": "/api/donations/checkout", "description": "Create Stripe checkout"},
+      {"method": "POST", "path": "/api/webhooks/stripe", "description": "Handle Stripe webhooks"}
+    ],
+    "authenticated": [
+      {"method": "GET", "path": "/api/volunteers/me", "description": "Get own volunteer profile"},
+      {"method": "PATCH", "path": "/api/volunteers/me", "description": "Update own profile"},
+      {"method": "GET", "path": "/api/volunteers/me/programs", "description": "Get assigned programs"},
+      {"method": "POST", "path": "/api/volunteers/me/hours", "description": "Log hours"},
+      {"method": "GET", "path": "/api/volunteers/me/hours", "description": "Get hour history"},
+      {"method": "POST", "path": "/api/volunteer-programs", "description": "Sign up for program"},
+      {"method": "GET", "path": "/api/partners/me", "description": "Get own partner profile"},
+      {"method": "GET", "path": "/api/partners/me/referrals", "description": "List partner's referrals"},
+      {"method": "POST", "path": "/api/referrals", "description": "Create referral"},
+      {"method": "GET", "path": "/api/referrals/[id]", "description": "Get referral details"},
+      {"method": "POST", "path": "/api/referrals/[id]/notes", "description": "Add note"},
+      {"method": "GET", "path": "/api/donations/me", "description": "Get donation history"}
+    ],
+    "admin": [
+      {"method": "GET", "path": "/api/admin/stats", "description": "Dashboard statistics"},
+      {"method": "GET", "path": "/api/admin/referrals", "description": "List all referrals"},
+      {"method": "PATCH", "path": "/api/admin/referrals/[id]", "description": "Update referral"},
+      {"method": "POST", "path": "/api/admin/referrals/[id]/assign", "description": "Assign referral"},
+      {"method": "POST", "path": "/api/admin/referrals/[id]/intake", "description": "Complete intake"},
+      {"method": "CRUD", "path": "/api/admin/volunteers", "description": "Manage volunteers"},
+      {"method": "CRUD", "path": "/api/admin/partners", "description": "Manage partners"},
+      {"method": "CRUD", "path": "/api/admin/clients", "description": "Manage clients"},
+      {"method": "CRUD", "path": "/api/admin/programs", "description": "Manage programs"},
+      {"method": "CRUD", "path": "/api/admin/food-banks", "description": "Manage food banks"},
+      {"method": "CRUD", "path": "/api/admin/services", "description": "Manage services"},
+      {"method": "CRUD", "path": "/api/admin/campaigns", "description": "Manage campaigns"},
+      {"method": "GET", "path": "/api/admin/donations", "description": "Donation reports"},
+      {"method": "PATCH", "path": "/api/admin/hours/[id]", "description": "Approve/reject hours"}
+    ]
+  },
+  "execution_phases": [
+    {
+      "phase": 1,
+      "name": "Foundation",
+      "tasks": [
+        "Set up Next.js project with TypeScript",
+        "Configure Tailwind CSS",
+        "Install and configure Shadcn/ui",
+        "Set up Supabase project",
+        "Configure Supabase authentication",
+        "Set up Vercel project"
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "Database",
+      "tasks": [
+        "Create existing tables schema",
+        "Create new tables schema",
+        "Create junction tables",
+        "Set up RLS policies",
+        "Create database functions and triggers",
+        "Set up indexes"
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Authentication",
+      "tasks": [
+        "Implement Supabase Auth integration",
+        "Create auth pages",
+        "Implement RBAC",
+        "Create auth guards",
+        "Set up admin management"
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "Core Pages",
+      "tasks": [
+        "Build shared layouts",
+        "Build Volunteer pages",
+        "Build Partner pages",
+        "Build Get Help pages",
+        "Build Donate pages"
+      ]
+    },
+    {
+      "phase": 5,
+      "name": "Admin Dashboard",
+      "tasks": [
+        "Build admin layout",
+        "Build dashboard overview",
+        "Build entity management pages",
+        "Build referral queue",
+        "Build hour approval"
+      ]
+    },
+    {
+      "phase": 6,
+      "name": "Integrations",
+      "tasks": [
+        "Implement Stripe checkout",
+        "Set up Stripe webhooks",
+        "Implement email notifications",
+        "Set up Supabase Realtime"
+      ]
+    },
+    {
+      "phase": 7,
+      "name": "Testing & Launch",
+      "tasks": [
+        "Write E2E tests",
+        "Accessibility audit",
+        "Security review",
+        "Performance optimization",
+        "Production deployment"
+      ]
+    }
+  ]
+}
